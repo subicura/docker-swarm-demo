@@ -1,0 +1,68 @@
+# docker stack deploy --compose-file ./docker-compose.yml prom-stack
+version: "3"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    networks:
+      - monitoring
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command: -config.file=/etc/prometheus/prometheus.yml -storage.local.path=/prometheu -alertmanager.url=http://alertmanager:9093
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+  cadvisor:
+    image: google/cadvisor:v0.24.1
+    networks:
+      - monitoring
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker/:ro
+    deploy:
+      mode: global
+  node-exporter:
+    image: basi/node-exporter:latest
+    networks:
+      - monitoring
+    volumes:
+      - /proc:/host/proc
+      - /sys:/host/sys
+      - /:/rootfs
+      - /etc/hostname:/etc/host_hostname
+    environment:
+      HOST_HOSTNAME: /etc/host_hostname
+    deploy:
+      mode: global
+    command: |
+      -collector.procfs /host/proc -collector.sysfs /host/sys -collector.filesystem.ignored-mount-points "^/(sys|proc|dev|host|etc)($$|/)" --collector.textfile.directory /etc/node-exporter/ --collectors.enabled="conntrack,diskstats,entropy,filefd,filesystem,loadavg,mdadm,meminfo,netdev,netstat,stat,textfile,time,vmstat,ipvs"
+  elasticsearch:
+    image: elasticsearch
+    networks:
+      - monitoring
+    environment:
+      ES_JAVA_OPTS: -Xmx1G -Xms1G 
+    command: -Etransport.host=0.0.0.0 -Ediscovery.zen.minimum_master_nodes=1
+  grafana:
+    image: basi/grafana:v4.1.1
+    ports:
+      - 3000:3000
+    networks:
+      - monitoring
+    depends_on:
+      - elasticsearch
+      - prometheus
+    environment:
+      GF_SERVER_ROOT_URL: http://grafana.local.dev
+      GF_SECURITY_ADMIN_PASSWORD: password
+      PROMETHEUS_ENDPOINT: http://prometheus:9090
+      ELASTICSEARCH_ENDPOINT: http://elasticsearch:9200
+
+networks:
+  monitoring:
+  

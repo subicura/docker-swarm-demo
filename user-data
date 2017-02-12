@@ -1,0 +1,67 @@
+#cloud-config
+
+---
+coreos:
+  etcd2:
+    advertise-client-urls: http://$public_ipv4:2379
+    initial-advertise-peer-urls: http://$private_ipv4:2380
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    listen-peer-urls: http://$private_ipv4:2380,http://$private_ipv4:7001
+    discovery: https://discovery.etcd.io/d56dee41252931050fbbfca20208c913
+  fleet:
+    public-ip: "$public_ipv4"
+  flannel:
+    interface: "$public_ipv4"
+  units:
+  - name: etcd2.service
+    command: start
+  - name: fleet.service
+    command: start
+  - name: docker-tcp.socket
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=Docker Socket for the API
+
+      [Socket]
+      ListenStream=2375
+      Service=docker.service
+      BindIPv6Only=both
+
+      [Install]
+      WantedBy=sockets.target
+  - name: docker.service
+    drop-ins:
+    - name: 10-experimental.conf
+      content: |-
+        [Service]
+        Environment="DOCKER_OPTS='--experimental'"
+  - name: swap.service
+    command: start
+    content: |
+      [Unit]
+      Description=Turn on swap
+
+      [Service]
+      Type=oneshot
+      Environment="SWAP_PATH=/var/vm" "SWAP_FILE=swapfile1"
+      ExecStartPre=-/usr/bin/rm -rf ${SWAP_PATH}
+      ExecStartPre=/usr/bin/mkdir -p ${SWAP_PATH}
+      ExecStartPre=/usr/bin/touch ${SWAP_PATH}/${SWAP_FILE}
+      ExecStartPre=/bin/bash -c "fallocate -l 4096m ${SWAP_PATH}/${SWAP_FILE}"
+      ExecStartPre=/usr/bin/chmod 600 ${SWAP_PATH}/${SWAP_FILE}
+      ExecStartPre=/usr/sbin/mkswap ${SWAP_PATH}/${SWAP_FILE}
+      ExecStartPre=/usr/sbin/sysctl vm.swappiness=10
+      ExecStart=/sbin/swapon ${SWAP_PATH}/${SWAP_FILE}
+      ExecStop=/sbin/swapoff ${SWAP_PATH}/${SWAP_FILE}
+      ExecStopPost=-/usr/bin/rm -rf ${SWAP_PATH}
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+write_files:
+- path: "/etc/sysctl.d/vm.conf"
+  permissions: 420
+  content: |
+    vm.max_map_count = 262144

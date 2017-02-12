@@ -1,0 +1,4 @@
+.vagrant/
+shared/*
+!shared/.gitkeep
+!shared/redis/.gitkeep
