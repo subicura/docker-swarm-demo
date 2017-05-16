@@ -8,7 +8,7 @@
 
 - Create: `vagrant up`
 - Destroy: `vagrant destroy`
-- Status: `vagrat status`
+- Status: `vagrant status`
 - Connect: `vagrant ssh core-01`
 
 ## Virtual Box Info
